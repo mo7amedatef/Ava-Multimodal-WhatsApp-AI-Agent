@@ -18,6 +18,18 @@ async def memory_extraction_node(state: AICompanionState):
 
 
 
+async def memory_injection_node(state: AICompanionState):
+    """Retrieve and inject relevant memories into the character card."""
+    memory_manager = get_memory_manager()
+
+    recent_context = " ".join([m.content for m in state["messages"][-3:]])
+    memories = memory_manager.get_relevant_memories(recent_context)
+
+    memory_context = memory_manager.format_memories_for_prompt(memories)
+
+    return {"memory_context": memory_context}
+
+
 
 async def router_node(state: AICompanionState):
     """Route the conversation to the appropriate workflow based on the last messages."""
