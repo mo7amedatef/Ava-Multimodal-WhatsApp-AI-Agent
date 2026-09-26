@@ -2,8 +2,12 @@ from ai_companion.settings import settings
 
 from ai_companion.graph.state import AICompanionState
 from ai_companion.modules.memory.long_term.memory_manager import get_memory_manager
-from ai_companion.graph.utils.chains import get_router_chain
+from ai_companion.graph.utils.chains import (get_router_chain, get_character_response_chain)
 from ai_companion.modules.schedules.context_generation import ScheduleContextGenerator
+
+
+from langchain_core.messages import AIMessage
+from langchain_core.runnables import RunnableConfig
 
 
 
@@ -45,3 +49,21 @@ async def context_injection_node(state: AICompanionState):
     schedule_context = ScheduleContextGenerator.get_current_activity()
     apply_activity = schedule_context is not None and schedule_context != state.get("current_activity", "")
     return {"apply_activity": apply_activity, "current_activity": schedule_context or ""}
+
+
+
+async def conversation_node(state: AICompanionState, config: RunnableConfig):
+    current_activity = ScheduleContextGenerator.get_current_activity()
+    memory_context = state.get("memory_context", "")
+
+    chain = get_character_response_chain(state.get("summary", ""))
+
+    response = await chain.ainvoke(
+        {
+            "messages": state["messages"],
+            "current_activity": current_activity,
+            "memory_context": memory_context,
+        },
+        config,
+    )
+    return {"messages": AIMessage(content=response)}
