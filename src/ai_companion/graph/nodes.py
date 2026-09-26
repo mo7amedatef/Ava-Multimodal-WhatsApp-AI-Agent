@@ -3,6 +3,7 @@ from ai_companion.settings import settings
 from ai_companion.graph.state import AICompanionState
 from ai_companion.modules.memory.long_term.memory_manager import get_memory_manager
 from ai_companion.graph.utils.chains import get_router_chain
+from ai_companion.modules.schedules.context_generation import ScheduleContextGenerator
 
 
 
@@ -36,3 +37,11 @@ async def router_node(state: AICompanionState):
     chain = get_router_chain()
     response = await chain.ainvoke({"messages": state["messages"][-settings.ROUTER_MESSAGES_TO_ANALYZE :]})
     return {"workflow": response.response_type}
+
+
+
+async def context_injection_node(state: AICompanionState):
+    """Inject Ava's current activity into the state based on the time of day."""
+    schedule_context = ScheduleContextGenerator.get_current_activity()
+    apply_activity = schedule_context is not None and schedule_context != state.get("current_activity", "")
+    return {"apply_activity": apply_activity, "current_activity": schedule_context or ""}
