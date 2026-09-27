@@ -4,3 +4,7 @@ class TextToImageError(Exception):
     pass
 
 
+class TextToSpeechError(Exception):
+    """Custom exception for Text-to-speech conversion errors."""
+
+    pass
