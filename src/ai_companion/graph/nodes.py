@@ -1,12 +1,17 @@
+import os
+from uuid import uuid4
+from urllib import response
+
 from ai_companion.settings import settings
 
 from ai_companion.graph.state import AICompanionState
 from ai_companion.modules.memory.long_term.memory_manager import get_memory_manager
 from ai_companion.graph.utils.chains import (get_router_chain, get_character_response_chain)
 from ai_companion.modules.schedules.context_generation import ScheduleContextGenerator
+from ai_companion.graph.utils.helpers import get_text_to_image_module
 
 
-from langchain_core.messages import AIMessage
+from langchain_core.messages import (AIMessage, HumanMessage)
 from langchain_core.runnables import RunnableConfig
 
 
@@ -67,3 +72,31 @@ async def conversation_node(state: AICompanionState, config: RunnableConfig):
         config,
     )
     return {"messages": AIMessage(content=response)}
+
+
+
+
+async def image_node(state: AICompanionState, config: RunnableConfig) -> dict:
+    current_activity = ScheduleContextGenerator.get_current_activity()
+    memory_context = state.get("memory_context", "")
+
+    chain = get_character_response_chain(state.get("summary", ""))
+    text_to_image_module = get_text_to_image_module()
+
+    scenario = await text_to_image_module.create_scenario(state["messages"][-5:])
+
+    img_path = f"{settings.OUTPUT_DIR}/image_{uuid4()}.png"
+    await text_to_image_module.generate_image(scenario.image_prompt, img_path)
+
+    scenario_message = AIMessage(content=f"<image attached: {scenario.image_prompt}>")
+    updated_messages = state["messages"] + [scenario_message]
+
+    response = await chain.ainvoke(
+        {
+            "messages": updated_messages,
+            "current_activity": current_activity,
+            "memory_context": memory_context,
+        },
+        config,
+    )
+    return {"messages": AIMessage(content=response), "image_path": img_path}
