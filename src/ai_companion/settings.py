@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     TTI_IMAGE_HEIGHT: int = 768
     TTI_STEPS: int = 4
     OUTPUT_DIR: str = "generated_images"
+    
+    
+    TTS_MAX_CHARACTERS: int = 5000
+    TTS_STABILITY: float = 0.5
+    TTS_SIMILARITY_BOOST: float = 0.5
 
     SHORT_TERM_MEMORY_DB_PATH: str = "/app/data/memory.db"
 
