@@ -10,7 +10,7 @@ from ai_companion.modules.speech import TextToSpeech
 
 
 
-def get_chat_model(temperature: float = 0.7):
+def get_chat_model(temperature: float = 0.7) -> ChatGroq:
     return ChatGroq(
         api_key=settings.GROQ_API_KEY,
         model_name=settings.TEXT_MODEL_NAME,
