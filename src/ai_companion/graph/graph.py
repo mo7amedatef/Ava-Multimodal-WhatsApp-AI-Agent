@@ -54,6 +54,7 @@ def create_workflow_graph() -> StateGraph:
     return graph_builder
 
 # Compiled without a checkpointer. Used for LangGraph Studio
-graph = create_workflow_graph().compile()
+graph_builder = create_workflow_graph()
+graph = graph_builder.compile()
 
 
