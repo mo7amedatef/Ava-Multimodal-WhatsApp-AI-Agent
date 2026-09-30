@@ -82,7 +82,7 @@ async def on_message(message: cl.Message):
 
 
 @cl.on_audio_chunk
-async def on_audio_chunk(chunk: cl.AudioChunk):
+async def on_audio_chunk(chunk: cl.InputAudioChunk):
     """Handle incoming audio chunks"""
     if chunk.isStart:
         buffer = BytesIO()
