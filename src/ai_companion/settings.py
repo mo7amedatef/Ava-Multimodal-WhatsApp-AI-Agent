@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     TTS_MAX_CHARACTERS: int = 5000
     TTS_STABILITY: float = 0.5
     TTS_SIMILARITY_BOOST: float = 0.5
+    
+    
+    ITT_MAX_TOKENS: int = 1000
+    STT_LANGUAGE: str = "en"
 
     SHORT_TERM_MEMORY_DB_PATH: str = "/app/data/memory.db"
 
