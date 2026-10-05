@@ -48,6 +48,31 @@ class Settings(BaseSettings):
     
     ITT_MAX_TOKENS: int = 1000
     STT_LANGUAGE: str = "en"
+    
+    
+    # WhatsApp Cloud API settings
+    WHATSAPP_TOKEN: str
+    WHATSAPP_PHONE_NUMBER_ID: str
+    WHATSAPP_VERIFY_TOKEN: str
+    WHATSAPP_API_VERSION: str = "v21.0"
+    WHATSAPP_GRAPH_API_URL: str = "https://graph.facebook.com"
+    WHATSAPP_HTTP_TIMEOUT_SECONDS: float = 30.0
+    WHATSAPP_MAX_TEXT_LENGTH: int = 4096
+    WHATSAPP_MAX_CAPTION_LENGTH: int = 1024
+    WHATSAPP_AUDIO_MIME_TYPE: str = "audio/mpeg"
+    WHATSAPP_IMAGE_MIME_TYPE: str = "image/png"
+    WHATSAPP_IMAGE_ANALYSIS_PROMPT: str = (
+        "Please describe what you see in this image in the context of our conversation."
+    )
+    
+    
+    WHATSAPP_DEDUP_CACHE_SIZE: int = 1000
+    WHATSAPP_AUDIO_FILENAME: str = "response.mp3"
+    WHATSAPP_IMAGE_FILENAME: str = "response.png"
+    WHATSAPP_UNSUPPORTED_MESSAGE_REPLY: str = (
+        "Sorry, I can only understand text, voice notes and images for now."
+    )
+    WHATSAPP_PROCESSING_ERROR_REPLY: str = "Sorry, something went wrong on my side. Please try again in a moment."
 
     SHORT_TERM_MEMORY_DB_PATH: str = "/app/data/memory.db"
 
