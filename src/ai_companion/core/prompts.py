@@ -163,6 +163,5 @@ Output: {{
     "formatted_memory": "Studied computer science at MIT"
 }}
 
-Message: {message}
-Output:
+Now analyze the following user message and extract any important facts:
 """
