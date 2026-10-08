@@ -54,6 +54,7 @@ class Settings(BaseSettings):
     WHATSAPP_TOKEN: str
     WHATSAPP_PHONE_NUMBER_ID: str
     WHATSAPP_VERIFY_TOKEN: str
+    WHATSAPP_APP_SECRET: str | None = None
     WHATSAPP_API_VERSION: str = "v21.0"
     WHATSAPP_GRAPH_API_URL: str = "https://graph.facebook.com"
     WHATSAPP_HTTP_TIMEOUT_SECONDS: float = 30.0

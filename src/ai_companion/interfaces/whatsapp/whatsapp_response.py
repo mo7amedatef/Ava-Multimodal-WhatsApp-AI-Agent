@@ -1,6 +1,10 @@
+import hashlib
+import hmac
 import logging
+import time
+from collections import defaultdict
 from io import BytesIO
-from typing import Dict
+from typing import Dict, Optional
 
 import httpx
 from fastapi import APIRouter, Request, Response
@@ -18,14 +22,76 @@ logger = logging.getLogger(__name__)
 speech_to_text = SpeechToText()
 image_to_text = ImageToText()
 
-# Router for WhatsApp respo
+# Router for WhatsApp response
 whatsapp_router = APIRouter()
 
 # WhatsApp API credentials
 WHATSAPP_TOKEN = settings.WHATSAPP_TOKEN
 WHATSAPP_PHONE_NUMBER_ID = settings.WHATSAPP_PHONE_NUMBER_ID
 
+# Maximum media file size in bytes (25 MB — WhatsApp's own limit)
+MAX_MEDIA_SIZE_BYTES = 25 * 1024 * 1024
 
+# ──── Rate Limiter ───────────────────────────────────────
+# Simple per-user in-memory rate limiter
+_rate_limit_store: Dict[str, list] = defaultdict(list)
+RATE_LIMIT_WINDOW_SECONDS = 60
+RATE_LIMIT_MAX_REQUESTS = 20
+
+
+def _is_rate_limited(user_id: str) -> bool:
+    """Check if a user has exceeded the rate limit.
+
+    Allows RATE_LIMIT_MAX_REQUESTS messages per RATE_LIMIT_WINDOW_SECONDS.
+    """
+    now = time.time()
+    window_start = now - RATE_LIMIT_WINDOW_SECONDS
+
+    # Prune old entries
+    _rate_limit_store[user_id] = [t for t in _rate_limit_store[user_id] if t > window_start]
+
+    if len(_rate_limit_store[user_id]) >= RATE_LIMIT_MAX_REQUESTS:
+        return True
+
+    _rate_limit_store[user_id].append(now)
+    return False
+
+
+# ──── Webhook Signature Verification (V2) ────────────────
+def _verify_webhook_signature(payload: bytes, signature_header: Optional[str]) -> bool:
+    """Verify the X-Hub-Signature-256 HMAC from Meta/WhatsApp.
+
+    Returns True if the signature is valid, or if WHATSAPP_APP_SECRET
+    is not configured (allows graceful opt-in during development).
+    """
+    app_secret = getattr(settings, "WHATSAPP_APP_SECRET", None)
+    if not app_secret:
+        # Not configured — log a warning but don't block (dev mode)
+        logger.warning(
+            "WHATSAPP_APP_SECRET is not set — webhook signature verification is DISABLED. "
+            "Set it before going to production!"
+        )
+        return True
+
+    if not signature_header:
+        logger.warning("Missing X-Hub-Signature-256 header — rejecting request")
+        return False
+
+    # Header format: "sha256=<hex_digest>"
+    if not signature_header.startswith("sha256="):
+        return False
+
+    expected_sig = signature_header[7:]
+    computed_sig = hmac.new(
+        app_secret.encode("utf-8"),
+        payload,
+        hashlib.sha256,
+    ).hexdigest()
+
+    return hmac.compare_digest(computed_sig, expected_sig)
+
+
+# ──── Main Handler ───────────────────────────────────────
 @whatsapp_router.api_route("/whatsapp_response", methods=["GET", "POST"])
 async def whatsapp_handler(request: Request) -> Response:
     """Handles incoming messages and status updates from the WhatsApp Cloud API."""
@@ -36,6 +102,13 @@ async def whatsapp_handler(request: Request) -> Response:
             return Response(content=params.get("hub.challenge"), status_code=200)
         return Response(content="Verification token mismatch", status_code=403)
 
+    # ── V2: Verify webhook signature before processing ──
+    raw_body = await request.body()
+    signature = request.headers.get("X-Hub-Signature-256")
+    if not _verify_webhook_signature(raw_body, signature):
+        logger.warning("Webhook signature verification failed — rejecting request")
+        return Response(content="Invalid signature", status_code=403)
+
     try:
         data = await request.json()
         change_value = data["entry"][0]["changes"][0]["value"]
@@ -43,6 +116,11 @@ async def whatsapp_handler(request: Request) -> Response:
             message = change_value["messages"][0]
             from_number = message["from"]
             session_id = from_number
+
+            # ── V5: Rate limiting ──
+            if _is_rate_limited(session_id):
+                logger.warning(f"Rate limit exceeded for user {session_id}")
+                return Response(content="Rate limit exceeded", status_code=429)
 
             # Get user message and handle different message types
             content = ""
@@ -64,11 +142,16 @@ async def whatsapp_handler(request: Request) -> Response:
             else:
                 content = message["text"]["body"]
 
+            # ── V5: Enforce text length limit ──
+            if len(content) > settings.WHATSAPP_MAX_TEXT_LENGTH:
+                content = content[: settings.WHATSAPP_MAX_TEXT_LENGTH]
+                logger.warning(f"Truncated oversized message from {session_id} to {settings.WHATSAPP_MAX_TEXT_LENGTH} chars")
+
             # Process message through the graph agent
             async with AsyncSqliteSaver.from_conn_string(settings.SHORT_TERM_MEMORY_DB_PATH) as short_term_memory:
                 graph = graph_builder.compile(checkpointer=short_term_memory)
                 await graph.ainvoke(
-                    {"messages": [HumanMessage(content=content)]},
+                    {"messages": [HumanMessage(content=content)], "user_id": session_id},
                     {"configurable": {"thread_id": session_id}},
                 )
 
@@ -106,8 +189,9 @@ async def whatsapp_handler(request: Request) -> Response:
         return Response(content="Internal server error", status_code=500)
 
 
+# ──── Media helpers ──────────────────────────────────────
 async def download_media(media_id: str) -> bytes:
-    """Download media from WhatsApp."""
+    """Download media from WhatsApp with size validation (V4)."""
     media_metadata_url = f"{settings.WHATSAPP_GRAPH_API_URL}/{settings.WHATSAPP_API_VERSION}/{media_id}"
     headers = {"Authorization": f"Bearer {WHATSAPP_TOKEN}"}
 
@@ -117,34 +201,36 @@ async def download_media(media_id: str) -> bytes:
         metadata = metadata_response.json()
         download_url = metadata.get("url")
 
-        media_response = await client.get(download_url, headers=headers)
-        media_response.raise_for_status()
-        return media_response.content
+        # ── V4: Check file size before downloading ──
+        file_size = metadata.get("file_size")
+        if file_size and int(file_size) > MAX_MEDIA_SIZE_BYTES:
+            raise ValueError(
+                f"Media file too large ({int(file_size)} bytes). "
+                f"Max allowed: {MAX_MEDIA_SIZE_BYTES} bytes."
+            )
+
+        # Stream the download with a size guard
+        downloaded = bytearray()
+        async with client.stream("GET", download_url, headers=headers) as stream:
+            stream.raise_for_status()
+            async for chunk in stream.aiter_bytes(chunk_size=8192):
+                downloaded.extend(chunk)
+                if len(downloaded) > MAX_MEDIA_SIZE_BYTES:
+                    raise ValueError(
+                        f"Media download exceeded {MAX_MEDIA_SIZE_BYTES} bytes — aborting."
+                    )
+        return bytes(downloaded)
 
 
 async def process_audio_message(message: Dict) -> str:
     """Download and transcribe audio message."""
     audio_id = message["audio"]["id"]
-    media_metadata_url = f"{settings.WHATSAPP_GRAPH_API_URL}/{settings.WHATSAPP_API_VERSION}/{audio_id}"
-    headers = {"Authorization": f"Bearer {WHATSAPP_TOKEN}"}
+    audio_data = await download_media(audio_id)
 
-    async with httpx.AsyncClient() as client:
-        metadata_response = await client.get(media_metadata_url, headers=headers)
-        metadata_response.raise_for_status()
-        metadata = metadata_response.json()
-        download_url = metadata.get("url")
-
-    # Download the audio file
-    async with httpx.AsyncClient() as client:
-        audio_response = await client.get(download_url, headers=headers)
-        audio_response.raise_for_status()
-
-    # Prepare for transcription
-    audio_buffer = BytesIO(audio_response.content)
+    audio_buffer = BytesIO(audio_data)
     audio_buffer.seek(0)
-    audio_data = audio_buffer.read()
 
-    return await speech_to_text.transcribe(audio_data)
+    return await speech_to_text.transcribe(audio_buffer.read())
 
 
 async def send_response(
