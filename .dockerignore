@@ -1,0 +1,14 @@
+.venv/
+.git/
+.gitignore
+__pycache__/
+*.pyc
+*.pyo
+.env
+.env.example
+long_term_memory/
+short_term_memory/
+*.egg-info/
+.ruff_cache/
+.mypy_cache/
+.python-version
