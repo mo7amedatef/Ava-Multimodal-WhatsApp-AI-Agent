@@ -82,7 +82,7 @@ ava-delete: ## Stop everything + remove containers and data dirs
 dev-chainlit: ## Run Chainlit locally (Qdrant in Docker)
 	docker compose up -d qdrant
 	@echo "Waiting for Qdrant healthcheck…"
-	@until docker compose exec qdrant curl -sf http://localhost:6333/healthz > /dev/null 2>&1; do sleep 1; done
+	@until curl -sf http://localhost:6333/healthz > /dev/null 2>&1; do sleep 1; done
 	@echo "Qdrant ready — starting Chainlit…"
 	QDRANT_URL=http://localhost:6333 uv run chainlit run \
 		src/ai_companion/interfaces/chainlit/app.py --port 8000
@@ -90,7 +90,7 @@ dev-chainlit: ## Run Chainlit locally (Qdrant in Docker)
 dev-whatsapp: ## Run WhatsApp server locally (Qdrant in Docker)
 	docker compose up -d qdrant
 	@echo "Waiting for Qdrant healthcheck…"
-	@until docker compose exec qdrant curl -sf http://localhost:6333/healthz > /dev/null 2>&1; do sleep 1; done
+	@until curl -sf http://localhost:6333/healthz > /dev/null 2>&1; do sleep 1; done
 	@echo "Qdrant ready — starting WhatsApp server…"
 	QDRANT_URL=http://localhost:6333 uv run fastapi dev \
 		src/ai_companion/interfaces/whatsapp/webhook_endpoint.py --port 8080
