@@ -54,7 +54,7 @@ async def on_message(message: cl.Message):
         async with AsyncSqliteSaver.from_conn_string(settings.SHORT_TERM_MEMORY_DB_PATH) as short_term_memory:
             graph = graph_builder.compile(checkpointer=short_term_memory)
             async for chunk in graph.astream(
-                {"messages": [HumanMessage(content=content)]},
+                {"messages": [HumanMessage(content=content)], "user_id": thread_id},
                 {"configurable": {"thread_id": thread_id}},
                 stream_mode="messages",
             ):
@@ -113,7 +113,7 @@ async def on_audio_end(elements):
         async with AsyncSqliteSaver.from_conn_string(settings.SHORT_TERM_MEMORY_DB_PATH) as short_term_memory:
             graph = graph_builder.compile(checkpointer=short_term_memory)
             output_state = await graph.ainvoke(
-                {"messages": [HumanMessage(content=transcription)]},
+                {"messages": [HumanMessage(content=transcription)], "user_id": thread_id},
                 {"configurable": {"thread_id": thread_id}},
             )
 

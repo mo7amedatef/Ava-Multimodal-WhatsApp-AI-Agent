@@ -23,7 +23,8 @@ async def memory_extraction_node(state: AICompanionState):
         return {}
     
     memory_manager = get_memory_manager()
-    await memory_manager.extract_and_store_memories(state["messages"][-1])
+    user_id = state.get("user_id", "default")
+    await memory_manager.extract_and_store_memories(state["messages"][-1], user_id=user_id)
     return {}
 
 
@@ -31,9 +32,10 @@ async def memory_extraction_node(state: AICompanionState):
 async def memory_injection_node(state: AICompanionState):
     """Retrieve and inject relevant memories into the character card."""
     memory_manager = get_memory_manager()
+    user_id = state.get("user_id", "default")
 
     recent_context = " ".join([m.content for m in state["messages"][-3:]])
-    memories = memory_manager.get_relevant_memories(recent_context)
+    memories = memory_manager.get_relevant_memories(recent_context, user_id=user_id)
 
     memory_context = memory_manager.format_memories_for_prompt(memories)
 

@@ -6,7 +6,7 @@ from typing import List, Optional
 
 from ai_companion.settings import settings
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, PointStruct, VectorParams
+from qdrant_client.models import Distance, FieldCondition, Filter, MatchValue, PointStruct, VectorParams
 from sentence_transformers import SentenceTransformer
 
 
@@ -55,26 +55,34 @@ class VectorStore:
             ),
         )
 
-    def find_similar_memory(self, text: str) -> Optional[Memory]:
-        """Find if a similar memory already exists.
+    def _build_user_filter(self, user_id: str) -> Filter:
+        """Build a Qdrant filter that scopes results to a single user."""
+        return Filter(
+            must=[FieldCondition(key="user_id", match=MatchValue(value=user_id))]
+        )
+
+    def find_similar_memory(self, text: str, user_id: str) -> Optional[Memory]:
+        """Find if a similar memory already exists for this user.
 
         Args:
             text: The text to search for
+            user_id: The user to scope the search to
 
         Returns:
             Optional Memory if a similar one is found
         """
-        results = self.search_memories(text, k=1)
+        results = self.search_memories(text, user_id=user_id, k=1)
         if results and results[0].score >= self.SIMILARITY_THRESHOLD:
             return results[0]
         return None
 
-    def store_memory(self, text: str, metadata: dict) -> None:
-        """Store a new memory in the vector store.
+    def store_memory(self, text: str, metadata: dict, user_id: str) -> None:
+        """Store a new memory in the vector store, scoped to a specific user.
 
         Args:
             text: The text content of the memory
             metadata: Additional information about the memory (timestamp, type, etc.)
+            user_id: The owner of this memory
         """
         if not self._collection_exists():
             self._create_collection()
@@ -85,6 +93,7 @@ class VectorStore:
             vector=embedding.tolist(),
             payload={
                 "text": text,
+                "user_id": user_id,
                 **metadata,
             },
         )
@@ -94,11 +103,12 @@ class VectorStore:
             points=[point],
         )
 
-    def search_memories(self, query: str, k: int = 5) -> List[Memory]:
-        """Search for similar memories in the vector store.
+    def search_memories(self, query: str, user_id: str, k: int = 5) -> List[Memory]:
+        """Search for similar memories scoped to a specific user.
 
         Args:
             query: Text to search for
+            user_id: The user to scope the search to
             k: Number of results to return
 
         Returns:
@@ -111,13 +121,14 @@ class VectorStore:
         results = self.client.search(
             collection_name=self.COLLECTION_NAME,
             query_vector=query_embedding.tolist(),
+            query_filter=self._build_user_filter(user_id),
             limit=k,
         )
 
         return [
             Memory(
                 text=hit.payload["text"],
-                metadata={key: val for key, val in hit.payload.items() if key != "text"},
+                metadata={key: val for key, val in hit.payload.items() if key not in ("text", "user_id")},
                 score=hit.score,
             )
             for hit in results
