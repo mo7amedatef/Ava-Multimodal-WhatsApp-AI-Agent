@@ -85,8 +85,17 @@ class TextToImage:
     async def create_scenario(self, chat_history: Optional[list] = None) -> ScenarioPrompt:
         """Create a first-person narrative scenario and image prompt based on chat history."""
         try:
+            def _sanitize_content(text: str) -> str:
+                """Strip newlines and escape role-like prefixes to prevent
+                users from injecting fake System/Human/AI messages."""
+                sanitized = text.replace("\n", " ").replace("\r", " ")
+                # Escape any attempt to inject role prefixes
+                for prefix in ("System:", "Human:", "Ai:", "Assistant:", "User:"):
+                    sanitized = sanitized.replace(prefix, prefix.replace(":", "∶"))
+                return sanitized.strip()
+
             formatted_history = "\n".join(
-                [f"{msg.type.title()}: {msg.content}" for msg in chat_history]
+                [f"[{msg.type.upper()}] {_sanitize_content(msg.content)}" for msg in chat_history]
             )
             self.logger.info("Creating scenario from chat history")
 
