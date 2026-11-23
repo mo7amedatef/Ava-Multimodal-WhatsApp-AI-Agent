@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y \
 COPY uv.lock pyproject.toml README.md /app/
 
 # Install the application dependencies
-RUN uv sync --frozen --no-cache
+RUN uv sync --frozen --no-cache --no-dev
 
 # Copy your application code into the container
 COPY src/ /app/src/
@@ -37,4 +37,4 @@ VOLUME ["/app/data"]
 EXPOSE 8000
 
 # Run the FastAPI app using uvicorn
-CMD ["chainlit", "run", "ai_companion/interfaces/chainlit/app.py", "--port", "8000", "--host", "0.0.0.0"]
+CMD ["chainlit", "run", "src/ai_companion/interfaces/chainlit/app.py", "--port", "8000", "--host", "0.0.0.0"]
