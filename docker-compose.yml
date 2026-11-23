@@ -4,7 +4,7 @@ services:
     ports:
       - "6333:6333"
     volumes:
-      - ./long_term_memory:/qdrant/storage
+      - qdrant_data:/qdrant/storage
     restart: unless-stopped
 
   chainlit:
@@ -19,7 +19,7 @@ services:
       - QDRANT_URL=http://qdrant:6333
     restart: unless-stopped
     volumes: 
-      - ./short_term_memory:/app/data
+      - short_term_memory:/app/data
     depends_on:
       - qdrant
 
@@ -35,7 +35,11 @@ services:
       - QDRANT_URL=http://qdrant:6333
     restart: unless-stopped
     volumes: 
-      - ./short_term_memory:/app/data
+      - short_term_memory:/app/data
     depends_on:
       - qdrant
+
+volumes:
+  qdrant_data:
+  short_term_memory:
         
